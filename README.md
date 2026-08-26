@@ -24,7 +24,9 @@ behind every major decision.
 
 - **Sign up / sign in** with a real account (email + password).
 - **Quick Practice** — answer real SAT Math questions one at a time, with a
-  confidence check and a full step-by-step solution afterward.
+  confidence check, a sound effect for a correct/incorrect answer and for
+  finishing the session (`src/lib/sounds.ts`, assets in `public/sounds/`),
+  and a full step-by-step solution afterward.
 - **Full Test** — a faithful rebuild of the original Diagnostic-Test app's
   exam experience: pick a difficulty bank and timing accommodation, then a
   timed 22-question run with a draggable/resizable Desmos calculator, a

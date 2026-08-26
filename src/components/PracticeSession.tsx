@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isAnswerCorrect } from "@/lib/questions";
 import { advanceReviewItem, completeSession, markMissedForReview, recordAttempt, startSession } from "@/lib/attempts";
 import { scheduleAfterSuccess } from "@/lib/reviewScheduler";
+import { playSound } from "@/lib/sounds";
 import type { Confidence, Question } from "@/lib/types";
 import type { ReviewItem } from "@/lib/reviewScheduler";
 import { QuestionCard } from "./QuestionCard";
@@ -82,6 +83,11 @@ export function PracticeSession({
 
     const correct = isAnswerCorrect(question, response);
     if (correct) setCorrectCount((count) => count + 1);
+    // Play immediately, synchronously within this click handler — waiting
+    // until after the database write below risks the browser no longer
+    // treating this as a direct response to the user's click, which some
+    // browsers require in order to allow audio playback.
+    playSound(correct ? "correct" : "incorrect");
 
     if (userId) {
       const sessionId = await sessionIdRef.current;
@@ -121,6 +127,7 @@ export function PracticeSession({
       setIndex((value) => value + 1);
       return;
     }
+    playSound("practiceComplete");
     if (userId) {
       const sessionId = await sessionIdRef.current;
       await completeSession(supabase, sessionId!, questions.length, correctCount);
