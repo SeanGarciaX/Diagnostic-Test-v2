@@ -105,3 +105,42 @@ export function containsLatex(value: string | null | undefined): boolean {
   const s = normalizeLatex(value);
   return s.includes("\\") || s.includes("^") || s.includes("_") || /[=<>+\-*/|]/.test(s);
 }
+
+// --- Answer-text classification, ported from the original app's setSafeAnswer() ---
+//
+// A stored "correct answer" isn't always pure math. Sending an entire
+// mixed string like "4,995 kg per second" through MathJax collapses all
+// its spaces (math mode ignores literal whitespace between plain words),
+// producing "4,995kgpersecond". The original app avoided this by
+// classifying the answer first and only sending the actually-mathematical
+// part through MathJax. planAnswerRender() is that same classification,
+// pulled out as a plain function so it's unit-testable — SafeAnswerText.tsx
+// just renders whatever plan this returns.
+
+export type AnswerRenderPlan =
+  | { kind: "empty"; letter: string }
+  | { kind: "number-then-words"; letter: string; number: string; words: string }
+  | { kind: "math"; letter: string; body: string }
+  | { kind: "prose"; letter: string; body: string };
+
+const LETTER_PREFIX = /^([ABCD])\.\s*(.*)$/;
+const NUMBER_THEN_WORDS = /^([-+]?(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d+)?)\s+(.+)$/;
+const HAS_TEX_COMMAND = /\\[A-Za-z]+/;
+const HAS_MATH_STRUCTURE = /[=<>≤≥≠≈∠√^_]/;
+const HAS_FRACTION = /\d+\s*\/\s*\d+/;
+
+export function planAnswerRender(value: string): AnswerRenderPlan {
+  const raw = value.trim();
+  const letterMatch = raw.match(LETTER_PREFIX);
+  const letter = letterMatch?.[1] ?? "";
+  const body = (letterMatch?.[2] ?? raw).trim();
+
+  if (!body) return { kind: "empty", letter };
+
+  const hasTexCommand = HAS_TEX_COMMAND.test(body);
+  const numberThenWords = !hasTexCommand ? body.match(NUMBER_THEN_WORDS) : null;
+  if (numberThenWords) return { kind: "number-then-words", letter, number: numberThenWords[1], words: numberThenWords[2] };
+
+  const looksLikeMath = hasTexCommand || HAS_MATH_STRUCTURE.test(body) || HAS_FRACTION.test(body);
+  return looksLikeMath ? { kind: "math", letter, body } : { kind: "prose", letter, body };
+}

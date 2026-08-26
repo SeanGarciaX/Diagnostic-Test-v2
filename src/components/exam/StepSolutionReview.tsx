@@ -9,16 +9,17 @@
 import { useEffect, useState } from "react";
 import type { QuestionSolution } from "@/lib/types";
 import { SafeMathText } from "./SafeMathText";
+import { SafeAnswerText } from "./SafeAnswerText";
 import { GeometryDiagram } from "./GeometryDiagram";
 import styles from "./exam.module.css";
 
 const MAX_STEPS = 7;
 
 export function StepSolutionReview({ solution, questionKey }: { solution: QuestionSolution; questionKey: string }) {
+  // The parent keys this whole component by question id (see
+  // FullTestExam.tsx), so a fresh instance — starting back at step 0 — is
+  // exactly what mounts whenever a different question is being reviewed.
   const [stepIndex, setStepIndex] = useState(0);
-
-  // Reset to the first step whenever a different question is being reviewed.
-  useEffect(() => setStepIndex(0), [questionKey]);
 
   const total = Math.min(solution.steps.length, MAX_STEPS);
 
@@ -58,10 +59,10 @@ export function StepSolutionReview({ solution, questionKey }: { solution: Questi
       <div className={styles.solutionSub}>Work through one step at a time. Review the verified solution one step at a time.</div>
 
       {solution.finalAnswer && (
-        <div className={styles.answerCard}>
+        <div className={styles.answerCard} key={questionKey}>
           <div className={styles.answerLabel}>Correct Answer</div>
           <div className={styles.answerValue}>
-            <SafeMathText tex={solution.finalAnswer} />
+            <SafeAnswerText value={solution.finalAnswer} />
           </div>
         </div>
       )}
@@ -74,7 +75,11 @@ export function StepSolutionReview({ solution, questionKey }: { solution: Questi
         </div>
       )}
 
-      <div className={styles.solutionStep}>
+      {/* Keyed by question + step so React fully remounts this subtree on every
+          step/question change, instead of reusing the same DOM nodes (and
+          whatever MathJax rendering state they're mid-way through) for
+          different content. */}
+      <div className={styles.solutionStep} key={`${questionKey}-${stepIndex}`}>
         <div className={styles.stepNumber}>{stepIndex + 1}</div>
         <div>
           <div className={styles.stepLabel}>{step.title || `Step ${stepIndex + 1}`}</div>
@@ -167,7 +172,7 @@ export function StepSolutionReview({ solution, questionKey }: { solution: Questi
       {isFinalStep && solution.remember && (
         <div className={styles.remember}>
           <strong>💡 Remember: </strong>
-          <SafeMathText tex={solution.remember} />
+          {solution.remember}
         </div>
       )}
     </div>

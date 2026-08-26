@@ -366,7 +366,7 @@ export function FullTestExam({
 
           {phase === "reviewing" && (
             <aside className={styles.solutionPanel}>
-              <StepSolutionReview solution={question.solution} questionKey={question.id} />
+              <StepSolutionReview key={question.id} solution={question.solution} questionKey={question.id} />
             </aside>
           )}
         </div>

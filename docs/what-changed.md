@@ -118,6 +118,23 @@ Two corrections made along the way:
   escaped text — same trust boundary as the original, spelled out in
   both files' comments. Solution-review content is unaffected and still
   has HTML stripped, matching the original's own handling of that field.
+- The solution-review panel sent some fields that are mostly or entirely
+  prose (`remember`, and the "Correct Answer" card) through MathJax the
+  same way as actual math content. MathJax's math mode doesn't preserve
+  literal spaces between plain words, so a sentence rendered that way
+  came out as one run-together word (e.g. "Remember: Corresponding
+  angles..." → "Correspondinganglesin..."). Fixed: `remember` now renders
+  as plain text; the answer card uses a new `SafeAnswerText.tsx` +
+  `planAnswerRender()` (in `mathSafe.ts`) that classifies the value first
+  — a bare number, "number + units," a real math expression, or plain
+  prose — ported from the original's own `setSafeAnswer()`, which did the
+  same classification and which this rebuild had read but not carried
+  over. Also fixed: a work-box math line could show its raw, un-typeset
+  TeX source (backslashes and all) instead of rendering — `SafeMathText`
+  now shows a readable fallback immediately, before ever attempting
+  MathJax, so raw source is never the visible state; and each step is now
+  given a React `key` (question + step index) so navigating steps mounts
+  fresh elements instead of reusing DOM nodes mid-render.
 
 ## What's new here, not carried over from either original
 
