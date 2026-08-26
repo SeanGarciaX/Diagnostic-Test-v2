@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { updateProfile } from "@/lib/profile";
+import { saveGuestSettings } from "@/lib/guestSettings";
 import { THEMES } from "@/lib/theme";
 import type { StudentProfile, ThemeId } from "@/lib/types";
 
@@ -18,10 +18,13 @@ export function SettingsForm({ profile, isGuest }: { profile: StudentProfile; is
   const [saved, setSaved] = useState(false);
 
   const save = async () => {
-    // Guests have no real Supabase session, so there's no row to write to
-    // — the form still works for previewing choices, it just can't persist.
-    if (isGuest) return;
-    await updateProfile(supabase, profile.id, { displayName, targetScore, dailyQuestionGoal, theme });
+    if (isGuest) {
+      // No Supabase session to write a profile row to — save in a cookie
+      // instead, then refresh so the server-rendered nav/theme pick it up.
+      saveGuestSettings({ displayName, targetScore, dailyQuestionGoal, theme });
+    } else {
+      await updateProfile(supabase, profile.id, { displayName, targetScore, dailyQuestionGoal, theme });
+    }
     setSaved(true);
     router.refresh();
   };
@@ -79,13 +82,13 @@ export function SettingsForm({ profile, isGuest }: { profile: StudentProfile; is
         </div>
       </div>
 
-      <button className="button-primary" onClick={save} disabled={isGuest}>
+      <button className="button-primary" onClick={save}>
         Save changes
       </button>
       {saved && <span style={{ marginLeft: 12, color: "var(--success)", fontSize: 13 }}>Saved</span>}
       {isGuest && (
         <p style={{ marginTop: 12, fontSize: 13, color: "var(--text-muted)" }}>
-          <Link href="/sign-up">Create an account</Link> to save settings.
+          Saved on this device only — create an account to keep these settings everywhere and attach them to real progress.
         </p>
       )}
     </div>

@@ -11,8 +11,10 @@
 // directly). Once that's sorted, swap this back to redirecting guests to
 // /sign-in — see git history on this file for the previous version.
 
+import { cookies } from "next/headers";
 import { createClient } from "./supabase/server";
 import { fetchOrCreateProfile } from "./profile";
+import { applyGuestSettings, GUEST_SETTINGS_COOKIE, parseGuestSettingsCookie } from "./guestSettings";
 import type { StudentProfile } from "./types";
 
 export const GUEST_PROFILE: StudentProfile = {
@@ -30,7 +32,10 @@ export async function getViewer() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { supabase, user: null, profile: GUEST_PROFILE };
+    // A guest has no account row to read settings from, so anything they've
+    // changed (see SettingsForm.tsx) lives in this cookie instead.
+    const savedSettings = parseGuestSettingsCookie(cookies().get(GUEST_SETTINGS_COOKIE)?.value);
+    return { supabase, user: null, profile: applyGuestSettings(GUEST_PROFILE, savedSettings) };
   }
 
   const profile = await fetchOrCreateProfile(supabase, user.id, user.user_metadata?.display_name as string | undefined);

@@ -12,10 +12,13 @@ behind every major decision.
 > **Temporary:** account creation is currently disabled as the front door
 > while a sign-up bug is being tracked down. Every visitor lands directly
 > in the app as a **guest** — real questions, practice, and the full test
-> all work; nothing is saved (no progress, no mastery history) until
-> that's fixed. `/sign-in` and `/sign-up` still work if you go to them
-> directly. See `src/lib/viewer.ts` and `src/app/page.tsx` for exactly
-> what changed and how to flip it back once sign-up is working.
+> all work; progress (attempts, mastery, review history) isn't saved until
+> that's fixed. Settings (display name, target score, daily goal, theme)
+> **are** saved for guests, but only in a cookie on that one device/browser
+> — see `src/lib/guestSettings.ts` — not tied to any account. `/sign-in`
+> and `/sign-up` still work if you go to them directly. See
+> `src/lib/viewer.ts` and `src/app/page.tsx` for exactly what changed and
+> how to flip it back once sign-up is working.
 
 ## What this app does
 
