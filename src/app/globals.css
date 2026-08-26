@@ -1,0 +1,134 @@
+/* Design tokens — one small palette per theme (see src/lib/theme.ts), plus
+   shared spacing/type/radius tokens used everywhere else. Every component
+   in this app should be styled from these variables rather than hardcoded
+   colors, so the whole app stays visually consistent and a theme change
+   only ever needs to touch this file plus theme.ts. */
+
+:root {
+  --accent: #f4774e;
+  --accent-text: #101727;
+  --nav-bg: #111b34;
+  --nav-text: #ffffff;
+  --page-bg: #f7f5ef;
+  --surface: #ffffff;
+  --surface-border: #e4e1d8;
+  --text: #171b26;
+  --text-muted: #6b7280;
+  --success: #1f7a3d;
+  --success-bg: #e7f5eb;
+  --danger: #c0392b;
+  --danger-bg: #fbeae8;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 40px;
+  --font-sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: Georgia, "Times New Roman", serif;
+  --shadow-card: 0 2px 10px rgba(20, 30, 50, 0.06);
+}
+
+/* Not scoped to :root on purpose — the theme attribute is set on the
+   signed-in app shell (see NavShell.tsx), not <html>, since the theme is
+   per-student and only known once someone is logged in. Custom properties
+   still cascade down to every descendant either way. */
+[data-theme="graphite"] {
+  --page-bg: #171c25;
+  --surface: #1f2531;
+  --surface-border: #2c3341;
+  --text: #f3f5f9;
+  --text-muted: #9aa3b5;
+  --success-bg: #16301f;
+  --danger-bg: #3a1d1a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--page-bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+}
+
+.button-primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.button-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.button-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.field input,
+.field select {
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 15px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.error-text {
+  color: var(--danger);
+  font-size: 13px;
+}
