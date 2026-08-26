@@ -72,6 +72,14 @@ button {
   cursor: pointer;
 }
 
+/* Question prompts/choices can embed an <img> directly (see
+   ProblemHtml.tsx) — the question bank doesn't constrain its size, so
+   keep it from overflowing its card regardless of the source dimensions. */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--surface-border);

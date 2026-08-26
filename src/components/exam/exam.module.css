@@ -220,11 +220,6 @@
   line-height: 1.6;
   margin-bottom: 22px;
 }
-.center {
-  text-align: center;
-  width: 100%;
-  display: block;
-}
 .choice {
   display: flex;
   align-items: center;

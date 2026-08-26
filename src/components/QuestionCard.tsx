@@ -6,7 +6,8 @@
 // been submitted) lives in the parent so this component stays simple.
 
 import type { Question } from "@/lib/types";
-import { MathText } from "./MathText";
+import { formatPromptHtml } from "@/lib/mathText";
+import { ProblemHtml } from "./ProblemHtml";
 
 export function QuestionCard({
   question,
@@ -34,7 +35,7 @@ export function QuestionCard({
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)" }}>{question.difficulty.toUpperCase()}</span>
       </div>
 
-      <MathText as="h2" text={question.prompt} />
+      <ProblemHtml as="h2" html={formatPromptHtml(question.prompt)} />
 
       {question.imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -82,7 +83,7 @@ export function QuestionCard({
                 >
                   {String.fromCharCode(65 + index)}
                 </span>
-                <MathText text={choice} />
+                <ProblemHtml as="span" html={choice} />
               </button>
             );
           })}

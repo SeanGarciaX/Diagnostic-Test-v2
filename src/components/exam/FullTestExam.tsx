@@ -18,7 +18,9 @@ import Script from "next/script";
 import { createClient } from "@/lib/supabase/client";
 import { isAnswerCorrect, selectFullTestBank, type FullTestDifficulty } from "@/lib/questions";
 import { completeSession, markMissedForReview, recordAttempt, startSession } from "@/lib/attempts";
+import { formatPromptHtml } from "@/lib/mathText";
 import type { Question } from "@/lib/types";
+import { ProblemHtml } from "@/components/ProblemHtml";
 import { ExamConfigScreen, type Accommodation } from "./ExamConfigScreen";
 import { DirectionsModal } from "./DirectionsModal";
 import { ReferenceSheetModal } from "./ReferenceSheetModal";
@@ -268,9 +270,10 @@ export function FullTestExam({
                   <span className={styles.tag}>{question.difficulty}</span>
                 </div>
                 <div className={styles.prompt}>
-                  {/* Prompts are plain Unicode math text (see mathifyPrompt), not TeX — this
-                      only re-creates the original's [center]/newline formatting, nothing more. */}
-                  <div dangerouslySetInnerHTML={{ __html: formatPromptHtml(question.prompt) }} />
+                  {/* Prompts are plain Unicode math text (see mathifyPrompt), not TeX. Rendered
+                      as real HTML — like the original app — so embedded <img> tags and any
+                      formatting markup in the question bank actually show up, not just text. */}
+                  <ProblemHtml as="div" html={formatPromptHtml(question.prompt)} />
                   {question.imageUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={question.imageUrl} alt="Question diagram" style={{ maxWidth: "100%", margin: "18px auto 6px", display: "block" }} />
@@ -306,7 +309,7 @@ export function FullTestExam({
                       >
                         <span className={styles.choiceLeft}>
                           <span className={styles.letter}>{String.fromCharCode(65 + i)}</span>
-                          <span className={styles.choiceText}>{choice}</span>
+                          <ProblemHtml as="span" className={styles.choiceText} html={choice} />
                         </span>
                         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span className={styles.radio} />
@@ -423,17 +426,4 @@ function formatTime(totalSeconds: number) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}:${s < 10 ? "0" : ""}${s}`;
-}
-
-/**
- * Recreates the original app's only prompt formatting: a `[center]...[/center]`
- * marker becomes a centered block, and newlines become line breaks. The
- * prompt text itself was already stripped of any real HTML in mathifyPrompt,
- * so the only markup this introduces is the wrapper it builds here.
- */
-function formatPromptHtml(prompt: string): string {
-  return prompt
-    .replace(/\[center\]/gi, `<div class="${styles.center}">`)
-    .replace(/\[\/center\]/gi, "</div>")
-    .replace(/\n/g, "<br>");
 }

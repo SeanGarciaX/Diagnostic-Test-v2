@@ -99,12 +99,25 @@ All of that got rebuilt as normal, readable React components:
   options that actually worked (difficulty bank, timing accommodation)
   are unchanged.
 
-One correction made along the way: question prompts and answer choices in
-the original are shown as plain Unicode math text (π, √, x²) — they were
-never run through MathJax at all. Only the solution-review panel actually
-uses MathJax/TeX. An earlier draft of this rebuild ran everything through
-the same math renderer; `mathifyPrompt()` in `src/lib/mathText.ts` was
-corrected to match the original's actual (simpler) behavior.
+Two corrections made along the way:
+
+- Question prompts and answer choices in the original are shown as plain
+  Unicode math text (π, √, x²) — they were never run through MathJax at
+  all. Only the solution-review panel actually uses MathJax/TeX. An
+  earlier draft of this rebuild ran everything through the same math
+  renderer; `mathifyPrompt()` in `src/lib/mathText.ts` was corrected to
+  match the original's actual (simpler) behavior.
+- Prompts and choices can contain real embedded markup — a formatted
+  table, `<sup>`/`<sub>`, or a diagram embedded directly as an `<img>`
+  tag inside `question_text` — and the original renders that as actual
+  HTML (`.innerHTML`), trusting the question bank completely. An earlier
+  draft stripped all HTML out of prompts/choices as a defensive measure,
+  which silently deleted that formatting and any embedded images. Fixed:
+  `mathifyPrompt()` no longer strips HTML, and prompts/choices render
+  through `ProblemHtml.tsx` (`dangerouslySetInnerHTML`) instead of as
+  escaped text — same trust boundary as the original, spelled out in
+  both files' comments. Solution-review content is unaffected and still
+  has HTML stripped, matching the original's own handling of that field.
 
 ## What's new here, not carried over from either original
 

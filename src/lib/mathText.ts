@@ -64,12 +64,33 @@ const EXPONENT_DIGIT_MAP: Record<string, string> = {
  * shown as plain Unicode math text (π, √, x²), which is what this
  * produces. MathJax is reserved for the step-by-step solution review
  * panel (see SafeMathText.tsx), where the stored content actually is TeX.
+ *
+ * Deliberately does NOT strip HTML. Some rows in the question table format
+ * a problem with real markup (tables, <sup>/<sub>, etc.) or embed a
+ * diagram directly in `question_text` as an <img> tag — exactly like the
+ * original app, this is trusted and rendered as-is (see ProblemHtml.tsx),
+ * not escaped or stripped. That's safe here because this content comes
+ * from the question bank you (the site owner) curate in Supabase, not
+ * from anything a visitor submits at runtime.
  */
 export function mathifyPrompt(value: string | null | undefined): string {
-  const text = stripHtml(value);
+  const text = String(value ?? "").trim();
   return text
     .replace(/\bpi\b/gi, "π")
     .replace(/\bsqrt\b/gi, "√")
     .replace(/\*/g, " · ")
     .replace(/\^(-?\d+)/g, (_, digits: string) => [...digits].map((ch) => EXPONENT_DIGIT_MAP[ch] ?? ch).join(""));
+}
+
+/**
+ * Recreates the original app's only prompt-specific formatting on top of
+ * mathifyPrompt(): a `[center]...[/center]` marker becomes a centered
+ * block, and newlines become line breaks. Only used for the prompt —
+ * the original applies this to prompts, not answer choices.
+ */
+export function formatPromptHtml(prompt: string): string {
+  return prompt
+    .replace(/\[center\]/gi, '<div style="text-align:center;width:100%;display:block">')
+    .replace(/\[\/center\]/gi, "</div>")
+    .replace(/\n/g, "<br>");
 }

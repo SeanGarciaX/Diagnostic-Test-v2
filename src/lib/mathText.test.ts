@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mathifyPrompt, normalizeMath, stripHtml } from "./mathText";
+import { formatPromptHtml, mathifyPrompt, normalizeMath, stripHtml } from "./mathText";
 
 describe("stripHtml", () => {
   it("removes tags but keeps text", () => {
@@ -38,5 +38,26 @@ describe("mathifyPrompt", () => {
 
   it("converts exponents to Unicode superscripts, not TeX", () => {
     expect(mathifyPrompt("x^2 + y^-1")).toBe("x² + y⁻¹");
+  });
+
+  it("does NOT strip HTML — an embedded <img> or formatting tag passes through untouched", () => {
+    expect(mathifyPrompt('<p>Refer to the figure. <img src="https://example.com/fig.png" alt=""></p>')).toBe(
+      '<p>Refer to the figure. <img src="https://example.com/fig.png" alt=""></p>'
+    );
+    expect(mathifyPrompt("x<sup>2</sup> + 1")).toBe("x<sup>2</sup> + 1");
+  });
+});
+
+describe("formatPromptHtml", () => {
+  it("converts [center]...[/center] into a centered div", () => {
+    expect(formatPromptHtml("[center]x = 5[/center]")).toBe('<div style="text-align:center;width:100%;display:block">x = 5</div>');
+  });
+
+  it("converts newlines into line breaks", () => {
+    expect(formatPromptHtml("Line one\nLine two")).toBe("Line one<br>Line two");
+  });
+
+  it("leaves an embedded <img> tag untouched", () => {
+    expect(formatPromptHtml('<img src="fig.png">')).toBe('<img src="fig.png">');
   });
 });
