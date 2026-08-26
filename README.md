@@ -22,9 +22,14 @@ behind every major decision.
 - **Sign up / sign in** with a real account (email + password).
 - **Quick Practice** — answer real SAT Math questions one at a time, with a
   confidence check and a full step-by-step solution afterward.
-- **Full Test** — a timed, 22-question module with a question navigator,
-  flagging, and a review-before-submit screen, styled after the real
-  digital SAT.
+- **Full Test** — a faithful rebuild of the original Diagnostic-Test app's
+  exam experience: pick a difficulty bank and timing accommodation, then a
+  timed 22-question run with a draggable/resizable Desmos calculator, a
+  reference sheet, official-style directions, mark-for-review flagging,
+  per-choice "cross out," a question navigator, dark mode, a finish-screen
+  celebration animation, and a full step-by-step solution review (with
+  auto-generated geometry diagrams) afterward — see
+  `src/components/exam/FullTestExam.tsx`.
 - **Spaced review** — missed questions come back at 1, 3, 7, and 14-day
   intervals until you've got them down.
 - **Dashboard & Progress** — a mastery score per topic, accuracy, streaks,
@@ -43,6 +48,8 @@ src/
   app/            One folder per page (Next.js "App Router").
                    e.g. src/app/dashboard/page.tsx is the /dashboard page.
   components/     Reusable pieces of UI (a question card, the nav sidebar…).
+    exam/               everything specific to the Full Test experience
+                          (FullTestExam.tsx is the main one — start there)
   lib/            All the "thinking" — no UI code in here at all:
     questions.ts        loads & cleans up real questions from Supabase
     mathText.ts          turns raw text into math MathJax can render
@@ -52,6 +59,8 @@ src/
     attempts.ts / profile.ts   read & write the database tables
     supabase/               the three ways we talk to Supabase (browser,
                               server, and the session-refresh middleware)
+    exam/                     Full Test-specific logic (the defensive
+                                math-rendering fallback layer)
 db/
   migrations/0001_init.sql  the database schema — run this once, see below
 ```
@@ -122,10 +131,6 @@ npm run check             # all of the above, in order — run this before pushi
 To keep this first version simple and reliable, a few things from the
 earlier prototypes were left out rather than half-built:
 
-- A second, difficulty-adjusted test module (today's Full Test is one
-  22-question module; a true two-module adaptive exam is a natural next
-  step once this pattern feels familiar).
-- An in-app graphing calculator and reference-sheet overlay.
 - A dedicated multi-question adaptive diagnostic flow (the dashboard's
   "Orbit Coach" recommendation already adapts to your history, just not
   through its own guided quiz yet).

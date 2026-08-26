@@ -9,12 +9,6 @@
 import { useRef } from "react";
 import type { ElementType } from "react";
 
-declare global {
-  interface Window {
-    MathJax?: { typesetPromise?: (elements?: HTMLElement[]) => Promise<void> };
-  }
-}
-
 export function MathText({ text, as = "span" }: { text: string; as?: ElementType }) {
   const nodeRef = useRef<HTMLElement | null>(null);
   const Tag = as;

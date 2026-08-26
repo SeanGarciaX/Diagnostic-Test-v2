@@ -44,9 +44,16 @@ rebuilt from each, and the reasoning behind it.
   stored text into something MathJax renders correctly (fractions,
   exponents, symbols). Simplified from the original's much larger regex
   pipeline, covering the common cases in code that's easy to extend.
-- **The timed-test experience** (`src/components/ExamSimulation.tsx`) — a
-  question navigator, flagging, and review-before-submit, modeled on the
-  original's authentic exam feel.
+- **The full timed-test experience** (`src/components/exam/FullTestExam.tsx`
+  and the rest of `src/components/exam/`) — rebuilt to match the original
+  feature-for-feature: the difficulty/accommodation config screen, the
+  fixed 22-question banks (Standard = problem_id 1–22, Lower = 23–44),
+  the draggable/resizable Desmos calculator, reference sheet, directions
+  modal, mark-for-review, per-choice "cross out," question navigator,
+  dark mode, the finish-screen celebration animation (carried over as the
+  exact same embedded asset, not rewritten), and the full step-by-step
+  solution review with auto-generated geometry diagrams. See
+  [below](#the-full-test-rebuild-in-detail) for specifics.
 
 ## From Diagnostic-Test, cut or rebuilt
 
@@ -62,6 +69,42 @@ rebuilt from each, and the reasoning behind it.
   the database — a score vanished on refresh. This app's entire reason for
   existing is fixing that: every attempt is saved to `attempts`, every
   session to `practice_sessions`.
+
+## The Full Test rebuild, in detail
+
+The original app's exam screen was one ~1,400-line Python string of hand-
+tuned HTML/CSS/JavaScript, handed to Streamlit as a single opaque blob.
+Reading through the whole thing (not just its CSS) turned up a lot more
+real functionality than a first pass suggested — a config screen, a
+defensive math-rendering fallback layer, auto-generated SVG geometry
+diagrams, a resizable calculator, a whole embedded celebration mini-game.
+All of that got rebuilt as normal, readable React components:
+
+- `mathSafe.ts` / `SafeMathText.tsx` — the original validated LaTeX before
+  trusting MathJax with it, and fell back to a readable Unicode
+  approximation (`\frac{1}{2}` → `(1)/(2)`) if it wasn't safe or MathJax
+  failed. Same behavior, same fallback rules, now three small testable
+  functions instead of inline retry-loop JavaScript.
+- `GeometryDiagram.tsx` — the same four SVG shapes (triangle, right
+  triangle, circle, coordinate plane), generated from a solution step's
+  structured `diagram` data, same coordinates.
+- `celebrationAnimation.ts` — the finish-screen animation is carried over
+  **byte-for-byte** as the same embedded HTML asset, not rewritten; only
+  the postMessage bridge around it (score in, review/return-to-menu out)
+  is new code.
+- `ExamConfigScreen.tsx` — the original's start screen also showed several
+  permanently-disabled options (a "Full 44-question" length, other
+  practice tests, "High" difficulty) that were never actually selectable.
+  Those were left out here rather than recreated as dead UI; the two
+  options that actually worked (difficulty bank, timing accommodation)
+  are unchanged.
+
+One correction made along the way: question prompts and answer choices in
+the original are shown as plain Unicode math text (π, √, x²) — they were
+never run through MathJax at all. Only the solution-review panel actually
+uses MathJax/TeX. An earlier draft of this rebuild ran everything through
+the same math renderer; `mathifyPrompt()` in `src/lib/mathText.ts` was
+corrected to match the original's actual (simpler) behavior.
 
 ## What's new here, not carried over from either original
 

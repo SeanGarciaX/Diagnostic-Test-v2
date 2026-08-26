@@ -35,4 +35,8 @@ describe("mathifyPrompt", () => {
   it("replaces pi and sqrt with symbols", () => {
     expect(mathifyPrompt("pi times sqrt(4)")).toBe("π times √(4)");
   });
+
+  it("converts exponents to Unicode superscripts, not TeX", () => {
+    expect(mathifyPrompt("x^2 + y^-1")).toBe("x² + y⁻¹");
+  });
 });

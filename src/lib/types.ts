@@ -12,6 +12,7 @@ export type Confidence = "Unsure" | "Okay" | "Confident";
 /** A single SAT Math question, already normalized from the raw database row. */
 export type Question = {
   id: string; // problem_id from the database, always a string here
+  problemId: number | null; // numeric form, used to route the Full Test's question banks
   prompt: string; // question text, ready for MathJax rendering
   choices: string[]; // empty array for a student-response question
   correctIndex: number | null; // null for a student-response question
@@ -32,13 +33,31 @@ export type QuestionSolution = {
   steps: SolutionStep[];
   commonMistake: string | null;
   satTip: string | null;
+  remember: string | null;
 };
 
 export type SolutionStep = {
   title: string;
   explanation: string;
+  keywords: string[];
   mathLines: string[];
+  workLines: string[];
   rule: string | null;
+  why: string | null;
+  formula: string | null;
+  formulaName: string | null;
+  diagram: GeometryDiagram | null;
+};
+
+/** Structured data for the auto-generated SVG diagrams in the solution review. */
+export type GeometryDiagram = {
+  type: "triangle" | "right_triangle" | "circle" | "coordinate_plane";
+  rightAngle?: boolean;
+  labels?: Record<string, string>;
+  sideLabels?: Record<string, string>;
+  radius?: string;
+  radiusLabel?: string;
+  points?: { x: number; y: number; label?: string }[];
 };
 
 /** One answered question, as recorded to (and read back from) `attempts`. */

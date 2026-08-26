@@ -2,8 +2,8 @@
 
 // Drives one quick-practice session: shows a question, records the
 // answer to the database as soon as it's submitted, then moves on. This
-// is the untimed, one-question-at-a-time mode — see ExamSimulation.tsx
-// for the timed, two-module full test.
+// is the untimed, one-question-at-a-time mode — see
+// src/components/exam/FullTestExam.tsx for the timed Full Test.
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";

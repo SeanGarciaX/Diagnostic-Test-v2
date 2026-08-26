@@ -43,11 +43,33 @@ export function normalizeMath(value: string | null | undefined): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-/** Applies mathify-style substitutions used for question prompts and choices. */
+const EXPONENT_DIGIT_MAP: Record<string, string> = {
+  "0": "⁰",
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+  "5": "⁵",
+  "6": "⁶",
+  "7": "⁷",
+  "8": "⁸",
+  "9": "⁹",
+  "-": "⁻"
+};
+
+/**
+ * Applies the same substitutions as the original app's `mathify()`: this
+ * is deliberately NOT MathJax/TeX conversion. Question prompts and answer
+ * choices in the original are never sent through MathJax at all — they're
+ * shown as plain Unicode math text (π, √, x²), which is what this
+ * produces. MathJax is reserved for the step-by-step solution review
+ * panel (see SafeMathText.tsx), where the stored content actually is TeX.
+ */
 export function mathifyPrompt(value: string | null | undefined): string {
   const text = stripHtml(value);
   return text
     .replace(/\bpi\b/gi, "π")
     .replace(/\bsqrt\b/gi, "√")
-    .replace(/\*/g, " · ");
+    .replace(/\*/g, " · ")
+    .replace(/\^(-?\d+)/g, (_, digits: string) => [...digits].map((ch) => EXPONENT_DIGIT_MAP[ch] ?? ch).join(""));
 }
