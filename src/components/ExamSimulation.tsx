@@ -21,7 +21,7 @@ const TIME_LIMIT_SECONDS = 35 * 60;
 
 type Phase = "active" | "reviewing" | "finished";
 
-export function ExamSimulation({ userId, questions }: { userId: string; questions: Question[] }) {
+export function ExamSimulation({ userId, questions }: { userId: string | null; questions: Question[] }) {
   const supabase = createClient();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
@@ -32,7 +32,9 @@ export function ExamSimulation({ userId, questions }: { userId: string; question
   const [navigatorOpen, setNavigatorOpen] = useState(false);
 
   useEffect(() => {
-    startSession(supabase, userId, "full_test").then(setSessionId);
+    // Guests (userId === null) have no Supabase session to save a session
+    // row against — the test still runs, it just isn't recorded anywhere.
+    if (userId) startSession(supabase, userId, "full_test").then(setSessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -54,7 +56,6 @@ export function ExamSimulation({ userId, questions }: { userId: string; question
   const toggleFlag = (i: number) => setFlagged((items) => (items.includes(i) ? items.filter((v) => v !== i) : [...items, i]));
 
   const submit = async () => {
-    if (!sessionId) return;
     setPhase("finished");
 
     let correctCount = 0;
@@ -63,25 +64,31 @@ export function ExamSimulation({ userId, questions }: { userId: string; question
       const correct = isAnswerCorrect(question, response);
       if (correct) correctCount += 1;
 
-      await recordAttempt(supabase, {
-        userId,
-        sessionId,
-        problemId: question.id,
-        domain: question.domain,
-        topic: question.topic,
-        difficulty: question.difficulty,
-        correct,
-        selectedAnswer: typeof response === "number" ? question.choices[response] : response,
-        correctAnswer: question.correctIndex !== null ? question.choices[question.correctIndex] : question.correctValue,
-        hintUsed: false,
-        confidence: "Okay",
-        timeSeconds: null
-      });
+      // Guests (no userId/sessionId) still get to see their results below —
+      // there's just nothing to save, same as the practice-session flow.
+      if (userId && sessionId) {
+        await recordAttempt(supabase, {
+          userId,
+          sessionId,
+          problemId: question.id,
+          domain: question.domain,
+          topic: question.topic,
+          difficulty: question.difficulty,
+          correct,
+          selectedAnswer: typeof response === "number" ? question.choices[response] : response,
+          correctAnswer: question.correctIndex !== null ? question.choices[question.correctIndex] : question.correctValue,
+          hintUsed: false,
+          confidence: "Okay",
+          timeSeconds: null
+        });
 
-      if (!correct) await markMissedForReview(supabase, userId, question.id);
+        if (!correct) await markMissedForReview(supabase, userId, question.id);
+      }
     }
 
-    await completeSession(supabase, sessionId, questions.length, correctCount);
+    if (userId && sessionId) {
+      await completeSession(supabase, sessionId, questions.length, correctCount);
+    }
   };
 
   if (questions.length === 0) {

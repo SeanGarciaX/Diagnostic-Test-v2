@@ -1,19 +1,28 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/requireUser";
-import { fetchOrCreateProfile } from "@/lib/profile";
+import { getViewer } from "@/lib/viewer";
 import { fetchMasteryByTopic, fetchRecentAttempts, fetchReviewQueue } from "@/lib/attempts";
 import { recommendPractice } from "@/lib/adaptive";
 import { dueItems } from "@/lib/reviewScheduler";
 import { NavShell } from "@/components/NavShell";
+import type { Attempt, TopicMastery } from "@/lib/types";
+import type { ReviewItem } from "@/lib/reviewScheduler";
 
 export default async function DashboardPage() {
-  const { supabase, user } = await requireUser();
-  const profile = await fetchOrCreateProfile(supabase, user.id, user.user_metadata?.display_name as string | undefined);
-  const [attempts, mastery, reviewQueue] = await Promise.all([
-    fetchRecentAttempts(supabase, user.id),
-    fetchMasteryByTopic(supabase, user.id),
-    fetchReviewQueue(supabase, user.id)
-  ]);
+  const { supabase, user, profile } = await getViewer();
+
+  // Guests have no signed-in Supabase session, so there's nothing to read
+  // here yet — an empty history renders the same page with zeroed stats
+  // instead of erroring.
+  let attempts: Attempt[] = [];
+  let mastery: TopicMastery[] = [];
+  let reviewQueue: ReviewItem[] = [];
+  if (user) {
+    [attempts, mastery, reviewQueue] = await Promise.all([
+      fetchRecentAttempts(supabase, user.id),
+      fetchMasteryByTopic(supabase, user.id),
+      fetchReviewQueue(supabase, user.id)
+    ]);
+  }
 
   const recommendation = recommendPractice(attempts);
   const due = dueItems(reviewQueue);
@@ -32,6 +41,14 @@ export default async function DashboardPage() {
           ? `You've answered ${todayCount} question${todayCount === 1 ? "" : "s"} today. ${Math.max(0, profile.dailyQuestionGoal - todayCount)} left in your daily goal.`
           : "No questions answered yet today — a short session keeps your momentum going."}
       </p>
+
+      {!user && (
+        <div className="card" style={{ marginBottom: 24, borderColor: "var(--accent)" }}>
+          <strong>You&apos;re browsing as a guest.</strong>{" "}
+          <span style={{ color: "var(--text-muted)" }}>Questions and practice work normally, but nothing is being saved.</span>{" "}
+          <Link href="/sign-up">Create an account</Link> to keep your progress.
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 32 }}>
         <StatCard label="Questions answered" value={String(totalAttempts)} />

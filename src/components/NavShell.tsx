@@ -22,6 +22,7 @@ export function NavShell({
   children: React.ReactNode;
 }) {
   const theme = getTheme(profile.theme);
+  const isGuest = profile.id === "guest";
   const shellStyle: CSSProperties = {
     "--accent": theme.accent,
     "--accent-text": readableTextColor(theme.accent),
@@ -68,11 +69,17 @@ export function NavShell({
         </nav>
         <div style={{ marginTop: "auto", fontSize: 13, opacity: 0.85 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>{profile.displayName}</div>
-          <form action={signOut}>
-            <button type="submit" style={{ background: "none", border: "none", color: "inherit", padding: 0, opacity: 0.75, fontSize: 13 }}>
-              Sign out
-            </button>
-          </form>
+          {isGuest ? (
+            <Link href="/sign-up" style={{ color: "inherit", opacity: 0.75 }}>
+              Create account →
+            </Link>
+          ) : (
+            <form action={signOut}>
+              <button type="submit" style={{ background: "none", border: "none", color: "inherit", padding: 0, opacity: 0.75, fontSize: 13 }}>
+                Sign out
+              </button>
+            </form>
+          )}
         </div>
       </aside>
       <main style={{ flex: 1, padding: "32px 40px", color: "var(--text)" }}>{children}</main>

@@ -1,23 +1,25 @@
-import { requireUser } from "@/lib/requireUser";
-import { fetchOrCreateProfile } from "@/lib/profile";
+import { getViewer } from "@/lib/viewer";
 import { fetchRecentAttempts, fetchReviewQueue } from "@/lib/attempts";
 import { fetchQuestions, pickPracticeSet, questionsByIds } from "@/lib/questions";
 import { recommendPractice } from "@/lib/adaptive";
 import { dueItems } from "@/lib/reviewScheduler";
 import { NavShell } from "@/components/NavShell";
 import { PracticeSession } from "@/components/PracticeSession";
+import type { Attempt } from "@/lib/types";
+import type { ReviewItem } from "@/lib/reviewScheduler";
 
 const QUESTIONS_PER_SESSION = 8;
 
 export default async function PracticePage({ searchParams }: { searchParams: { mode?: string } }) {
-  const { supabase, user } = await requireUser();
-  const profile = await fetchOrCreateProfile(supabase, user.id);
+  const { supabase, user, profile } = await getViewer();
   const isReview = searchParams.mode === "review";
 
+  // The question bank itself is public-readable (no login needed) — only
+  // reading/writing a specific student's history requires a real session.
   const [allQuestions, attempts, reviewQueue] = await Promise.all([
     fetchQuestions(supabase, 200),
-    fetchRecentAttempts(supabase, user.id),
-    fetchReviewQueue(supabase, user.id)
+    user ? fetchRecentAttempts(supabase, user.id) : Promise.resolve<Attempt[]>([]),
+    user ? fetchReviewQueue(supabase, user.id) : Promise.resolve<ReviewItem[]>([])
   ]);
 
   const reviewItemsByProblemId = Object.fromEntries(reviewQueue.map((item) => [item.problemId, item]));
@@ -29,7 +31,12 @@ export default async function PracticePage({ searchParams }: { searchParams: { m
   return (
     <NavShell profile={profile} activeHref="/practice">
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
-        <PracticeSession userId={user.id} questions={sessionQuestions} isReview={isReview} reviewItemsByProblemId={reviewItemsByProblemId} />
+        {!user && (
+          <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 16 }}>
+            Browsing as a guest — your answers here won&apos;t be saved.
+          </p>
+        )}
+        <PracticeSession userId={user?.id ?? null} questions={sessionQuestions} isReview={isReview} reviewItemsByProblemId={reviewItemsByProblemId} />
       </div>
     </NavShell>
   );

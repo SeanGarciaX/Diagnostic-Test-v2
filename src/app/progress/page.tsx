@@ -1,24 +1,36 @@
-import { requireUser } from "@/lib/requireUser";
-import { fetchOrCreateProfile } from "@/lib/profile";
+import Link from "next/link";
+import { getViewer } from "@/lib/viewer";
 import { fetchMasteryByTopic, fetchRecentAttempts, fetchReviewQueue } from "@/lib/attempts";
 import { calculateMastery } from "@/lib/mastery";
 import { reviewLabel } from "@/lib/reviewScheduler";
 import { NavShell } from "@/components/NavShell";
+import type { Attempt, TopicMastery } from "@/lib/types";
+import type { ReviewItem } from "@/lib/reviewScheduler";
 
 export default async function ProgressPage() {
-  const { supabase, user } = await requireUser();
-  const profile = await fetchOrCreateProfile(supabase, user.id);
-  const [attempts, mastery, reviewQueue] = await Promise.all([
-    fetchRecentAttempts(supabase, user.id),
-    fetchMasteryByTopic(supabase, user.id),
-    fetchReviewQueue(supabase, user.id)
-  ]);
+  const { supabase, user, profile } = await getViewer();
+
+  let attempts: Attempt[] = [];
+  let mastery: TopicMastery[] = [];
+  let reviewQueue: ReviewItem[] = [];
+  if (user) {
+    [attempts, mastery, reviewQueue] = await Promise.all([
+      fetchRecentAttempts(supabase, user.id),
+      fetchMasteryByTopic(supabase, user.id),
+      fetchReviewQueue(supabase, user.id)
+    ]);
+  }
 
   const overallMastery = calculateMastery(attempts);
 
   return (
     <NavShell profile={profile} activeHref="/progress">
       <h1 style={{ marginTop: 0 }}>Your progress</h1>
+      {!user && (
+        <p style={{ color: "var(--text-muted)", marginTop: -8, marginBottom: 24 }}>
+          Browsing as a guest — <Link href="/sign-up">create an account</Link> to start building real history here.
+        </p>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 32 }}>
         <MetricCard label="Mastery score" value={`${overallMastery.score}`} />

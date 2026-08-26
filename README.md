@@ -9,6 +9,14 @@ and nothing saved). This app keeps what worked from each and drops the
 rest — see [`docs/what-changed.md`](docs/what-changed.md) for the reasoning
 behind every major decision.
 
+> **Temporary:** account creation is currently disabled as the front door
+> while a sign-up bug is being tracked down. Every visitor lands directly
+> in the app as a **guest** — real questions, practice, and the full test
+> all work; nothing is saved (no progress, no mastery history) until
+> that's fixed. `/sign-in` and `/sign-up` still work if you go to them
+> directly. See `src/lib/viewer.ts` and `src/app/page.tsx` for exactly
+> what changed and how to flip it back once sign-up is working.
+
 ## What this app does
 
 - **Sign up / sign in** with a real account (email + password).

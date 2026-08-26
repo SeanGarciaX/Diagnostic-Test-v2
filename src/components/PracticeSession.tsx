@@ -22,14 +22,17 @@ export function PracticeSession({
   isReview,
   reviewItemsByProblemId
 }: {
-  userId: string;
+  userId: string | null;
   questions: Question[];
   isReview: boolean;
   reviewItemsByProblemId: Record<string, ReviewItem>;
 }) {
   const supabase = createClient();
+  // Guests (userId === null) have no Supabase session, so any write here
+  // would just be rejected by Row Level Security — skip persistence
+  // entirely and let them work through the session locally instead.
   const sessionIdRef = useRef<Promise<string> | null>(null);
-  if (!sessionIdRef.current) {
+  if (!sessionIdRef.current && userId) {
     sessionIdRef.current = startSession(supabase, userId, isReview ? "practice" : "practice");
   }
 
@@ -80,34 +83,36 @@ export function PracticeSession({
     const correct = isAnswerCorrect(question, response);
     if (correct) setCorrectCount((count) => count + 1);
 
-    const sessionId = await sessionIdRef.current;
-    await recordAttempt(supabase, {
-      userId,
-      sessionId,
-      problemId: question.id,
-      domain: question.domain,
-      topic: question.topic,
-      difficulty: question.difficulty,
-      correct,
-      selectedAnswer: typeof response === "number" ? question.choices[response] : response,
-      correctAnswer: question.correctIndex !== null ? question.choices[question.correctIndex] : question.correctValue,
-      hintUsed: false,
-      confidence,
-      timeSeconds: Math.round((Date.now() - startedAt) / 1000)
-    });
-
-    const existingReviewItem = reviewItemsByProblemId[question.id];
-    if (existingReviewItem && correct) {
-      const advanced = scheduleAfterSuccess(existingReviewItem);
-      await advanceReviewItem(
-        supabase,
+    if (userId) {
+      const sessionId = await sessionIdRef.current;
+      await recordAttempt(supabase, {
         userId,
-        existingReviewItem,
-        advanced?.reviewStage ?? existingReviewItem.reviewStage,
-        advanced?.nextReviewAt ?? null
-      );
-    } else if (!correct) {
-      await markMissedForReview(supabase, userId, question.id);
+        sessionId,
+        problemId: question.id,
+        domain: question.domain,
+        topic: question.topic,
+        difficulty: question.difficulty,
+        correct,
+        selectedAnswer: typeof response === "number" ? question.choices[response] : response,
+        correctAnswer: question.correctIndex !== null ? question.choices[question.correctIndex] : question.correctValue,
+        hintUsed: false,
+        confidence,
+        timeSeconds: Math.round((Date.now() - startedAt) / 1000)
+      });
+
+      const existingReviewItem = reviewItemsByProblemId[question.id];
+      if (existingReviewItem && correct) {
+        const advanced = scheduleAfterSuccess(existingReviewItem);
+        await advanceReviewItem(
+          supabase,
+          userId,
+          existingReviewItem,
+          advanced?.reviewStage ?? existingReviewItem.reviewStage,
+          advanced?.nextReviewAt ?? null
+        );
+      } else if (!correct) {
+        await markMissedForReview(supabase, userId, question.id);
+      }
     }
   };
 
@@ -116,8 +121,10 @@ export function PracticeSession({
       setIndex((value) => value + 1);
       return;
     }
-    const sessionId = await sessionIdRef.current;
-    await completeSession(supabase, sessionId!, questions.length, correctCount);
+    if (userId) {
+      const sessionId = await sessionIdRef.current;
+      await completeSession(supabase, sessionId!, questions.length, correctCount);
+    }
     setFinished(true);
   };
 
