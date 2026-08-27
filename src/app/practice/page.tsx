@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getViewer } from "@/lib/viewer";
 import { fetchRecentAttempts, fetchReviewQueue } from "@/lib/attempts";
 import { fetchQuestions, pickPracticeSet, questionsByIds } from "@/lib/questions";
@@ -33,7 +34,8 @@ export default async function PracticePage({ searchParams }: { searchParams: { m
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
         {!user && (
           <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 16 }}>
-            Browsing as a guest — your answers here won&apos;t be saved.
+            Browsing as a guest — your answers are tracked on this browser and show up on your{" "}
+            <Link href="/dashboard">Dashboard</Link>.
           </p>
         )}
         <PracticeSession userId={user?.id ?? null} questions={sessionQuestions} isReview={isReview} reviewItemsByProblemId={reviewItemsByProblemId} />

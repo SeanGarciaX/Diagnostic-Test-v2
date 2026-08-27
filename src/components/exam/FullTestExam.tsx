@@ -18,6 +18,10 @@ import Script from "next/script";
 import { createClient } from "@/lib/supabase/client";
 import { isAnswerCorrect, selectFullTestBank, type FullTestDifficulty } from "@/lib/questions";
 import { completeSession, markMissedForReview, recordAttempt, startSession } from "@/lib/attempts";
+import { recordQuestionAttempt } from "@/lib/analytics";
+import { getOrCreateGuestIdClient } from "@/lib/guestId";
+import { useActiveTimeTracker } from "@/lib/activeTime";
+import { randomId } from "@/lib/id";
 import { formatPromptHtml } from "@/lib/mathText";
 import type { Question } from "@/lib/types";
 import { ProblemHtml } from "@/components/ProblemHtml";
@@ -67,6 +71,58 @@ export function FullTestExam({
   const sessionIdRef = useRef<Promise<string> | null>(null);
   const savedRef = useRef(false);
 
+  // --- Centralized analytics (guest + signed-in) — see src/lib/analytics.ts.
+  // One attempt id per bank question (used as question_attempts' primary
+  // key, so re-entering finish() twice can't double-record), plus a
+  // per-question active-time estimate built up as the student navigates
+  // between questions (see flushCurrentQuestion below and the timing rule
+  // documented in src/lib/activeTime.ts).
+  const { activeSecondsBetween } = useActiveTimeTracker();
+  const examSessionIdRef = useRef<string | null>(null);
+  const guestIdRef = useRef<string | null>(null);
+  const attemptIdsRef = useRef<string[]>([]);
+  const firstEnteredAtByIndexRef = useRef<(number | null)[]>([]);
+  const activeSecondsByIndexRef = useRef<number[]>([]);
+  const currentEnteredAtRef = useRef<number>(Date.now());
+
+  // Kept in sync via effects below so the auto-timeout path (finish()
+  // called from inside the setInterval in the next effect, which only
+  // re-subscribes on `phase` changes — see its own eslint-disable — reads
+  // a closure that can otherwise be stale for `current`/`bank`/`answers`)
+  // always records analytics against the real, current values instead of
+  // whatever they were the moment the timer started. This only affects
+  // the new analytics write path below, never the existing results
+  // screen or the legacy signed-in-only save, so nothing user-visible
+  // changes.
+  const currentRef = useRef(current);
+  useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
+  const bankRef = useRef(bank);
+  useEffect(() => {
+    bankRef.current = bank;
+  }, [bank]);
+  const answersRef = useRef(answers);
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  /** Adds the active time spent on whichever question is current right now (since it was last entered) into that question's running total, then resets the anchor. Safe to call more than once in a row — a second call just adds ~0. No-op outside the timed "active" phase (reviewing/results don't count as solving time). */
+  const flushCurrentQuestion = () => {
+    if (phase !== "active") return;
+    const idx = currentRef.current;
+    const now = Date.now();
+    if (firstEnteredAtByIndexRef.current[idx] == null) firstEnteredAtByIndexRef.current[idx] = currentEnteredAtRef.current;
+    activeSecondsByIndexRef.current[idx] = (activeSecondsByIndexRef.current[idx] ?? 0) + activeSecondsBetween(currentEnteredAtRef.current, now);
+    currentEnteredAtRef.current = now;
+  };
+
+  /** Use instead of setCurrent directly while the exam clock is running, so each question's active time is attributed correctly. */
+  const changeCurrent = (nextIndex: number) => {
+    flushCurrentQuestion();
+    setCurrent(nextIndex);
+  };
+
   useEffect(() => {
     if (phase !== "active") return;
     const timer = window.setInterval(() => {
@@ -96,6 +152,13 @@ export function FullTestExam({
     setSecondsLeft(config.moduleMinutes * 60);
     savedRef.current = false;
     if (userId) sessionIdRef.current = startSession(supabase, userId, "full_test");
+
+    examSessionIdRef.current = randomId();
+    attemptIdsRef.current = selected.map(() => randomId());
+    firstEnteredAtByIndexRef.current = new Array(selected.length).fill(null);
+    activeSecondsByIndexRef.current = new Array(selected.length).fill(0);
+    currentEnteredAtRef.current = Date.now();
+
     setPhase("active");
   };
 
@@ -112,10 +175,40 @@ export function FullTestExam({
   }, [bank, answers]);
 
   const finish = async (reason: "timeout" | "manual") => {
+    // Flush before the phase actually flips away from "active" below —
+    // `phase` here is still this render's snapshot, so flushCurrentQuestion
+    // correctly counts time on whichever question the student was on.
+    flushCurrentQuestion();
     setPhase("results");
     setResultsView(reason === "timeout" ? "plain" : "animation");
-    if (savedRef.current || !userId) return;
+    if (savedRef.current) return;
     savedRef.current = true;
+
+    // Centralized analytics — records for a guest and a signed-in student
+    // alike; only ANSWERED questions are recorded (an undefined response
+    // means "never submitted," so it's correctly skipped, not counted).
+    if (!guestIdRef.current && !userId) guestIdRef.current = getOrCreateGuestIdClient();
+    const analyticsSessionId = examSessionIdRef.current ?? randomId();
+    const examStartedAt = firstEnteredAtByIndexRef.current[0] ?? Date.now();
+    const bankForAnalytics = bankRef.current;
+    const answersForAnalytics = answersRef.current;
+    for (let i = 0; i < bankForAnalytics.length; i++) {
+      const question = bankForAnalytics[i];
+      const response = answersForAnalytics[i] ?? undefined;
+      void recordQuestionAttempt(supabase, {
+        attemptId: attemptIdsRef.current[i] ?? randomId(),
+        userId,
+        guestId: userId ? null : guestIdRef.current,
+        sessionId: analyticsSessionId,
+        source: "full_test",
+        question,
+        selectedResponse: response,
+        startedAt: firstEnteredAtByIndexRef.current[i] ?? examStartedAt,
+        activeSeconds: activeSecondsByIndexRef.current[i] ?? 0
+      });
+    }
+
+    if (!userId) return;
 
     const sessionId = await sessionIdRef.current;
     if (!sessionId) return;
@@ -383,17 +476,17 @@ export function FullTestExam({
             {current + 1} of {bank.length}
           </button>
           <div className={styles.navActions}>
-            <button className={styles.backBtn} disabled={current === 0} onClick={() => setCurrent((value) => value - 1)}>
+            <button className={styles.backBtn} disabled={current === 0} onClick={() => changeCurrent(current - 1)}>
               Back
             </button>
             <button
               className={styles.nextBtn}
               onClick={() => {
                 if (phase === "reviewing") {
-                  if (current < bank.length - 1) setCurrent((value) => value + 1);
+                  if (current < bank.length - 1) changeCurrent(current + 1);
                   else backToResults();
                 } else if (current < bank.length - 1) {
-                  setCurrent((value) => value + 1);
+                  changeCurrent(current + 1);
                 } else {
                   finish("manual");
                 }
@@ -410,7 +503,7 @@ export function FullTestExam({
               answered={answered}
               marked={marked}
               onSelect={(i) => {
-                setCurrent(i);
+                changeCurrent(i);
                 setNavigatorOpen(false);
               }}
               onClose={() => setNavigatorOpen(false)}
