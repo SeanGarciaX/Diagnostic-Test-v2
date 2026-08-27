@@ -83,8 +83,15 @@ src/
                                 math-rendering fallback layer)
 db/
   migrations/0001_init.sql  the OLDER, signed-in-only schema — run once
-  migrations/0002_question_attempts.sql  the Dashboard/Analytics schema —
-                                           run once, works for guests too
+  migrations/0002_question_attempts.sql  an early draft of the
+                                           Dashboard/Analytics schema —
+                                           superseded by 0003, kept for
+                                           history, do not run
+  migrations/0003_question_attempts_guest_schema.sql  adapts the app to the
+                                                         `question_attempts`
+                                                         table as it's
+                                                         actually set up in
+                                                         Supabase — run once
 ```
 
 Every page under `src/app/` follows the same shape: it's a small Server
@@ -104,14 +111,18 @@ question bank is already there) and Node.js installed locally.
 1. Open your Supabase project's dashboard → **SQL Editor** → **New query**.
 2. Paste in the entire contents of [`db/migrations/0001_init.sql`](db/migrations/0001_init.sql).
 3. Click **Run**.
-4. Repeat with [`db/migrations/0002_question_attempts.sql`](db/migrations/0002_question_attempts.sql).
+4. Repeat with [`db/migrations/0003_question_attempts_guest_schema.sql`](db/migrations/0003_question_attempts_guest_schema.sql)
+   (skip `0002` — it's superseded, see the file layout above).
 
 The first migration adds four tables (`profiles`, `practice_sessions`,
 `attempts`, `review_queue`) that only work for signed-in students. The
-second adds one more table, `question_attempts`, plus a handful of
-read-only SQL functions — this is what powers Dashboard/Advanced Analytics,
-and it's the one that also works for guests (no sign-in needed). Neither
-migration modifies or touches the existing question table in any way.
+third adapts `question_attempts` (every column, the unique index, RLS
+policies, and a handful of read-only SQL functions) to work with a table
+either created from this file directly or already set up by hand in
+Supabase — this is what powers Dashboard/Advanced Analytics, and it's the
+one that also works for guests (no sign-in needed). Every statement in it
+is safe to run more than once. No migration here modifies or touches the
+existing question table in any way.
 
 ### 2. Configure your environment
 
@@ -146,8 +157,8 @@ Open `http://localhost:3000`, create an account, and you're in.
 
 Dashboard and Advanced Analytics are built on a separate, newer system from
 the rest of the app (`question_attempts` — see
-`db/migrations/0002_question_attempts.sql`), specifically so it works for a
-guest, not just a signed-in student:
+`db/migrations/0003_question_attempts_guest_schema.sql`), specifically so
+it works for a guest, not just a signed-in student:
 
 - **One write path.** Every question-answering flow — Quick Practice,
   Spaced Review, and the Full Test — calls the same
@@ -163,13 +174,13 @@ guest, not just a signed-in student:
   ownership check in the migration — so guest history doesn't automatically
   carry over to an account today, but the schema is shaped so that could be
   added later without a rebuild.
-- **One submission = one attempt, on purpose.** The id recorded with each
-  attempt is generated client-side at submit time and used as that row's
-  primary key, so a double-click, a re-render, or a retried request can
-  never double-count — the database rejects the repeat insert and the app
-  treats that as "already recorded." Answering the same question again
-  later (e.g. spaced review resurfacing it) gets a fresh id, so it's
-  correctly counted as a second, real attempt.
+- **One submission = one attempt, on purpose.** `attempt_event_id` is
+  generated client-side at submit time and is written under a unique index
+  (see the migration), so a double-click, a re-render, or a retried request
+  all resend the SAME id and the repeat write is silently ignored rather
+  than becoming a second row. Answering the same question again later (e.g.
+  spaced review resurfacing it) gets a fresh id, so it's correctly counted
+  as a second, real attempt.
 - **"Active time," not wall-clock time.** `src/lib/activeTime.ts` excludes
   time while the tab isn't visible/focused, and time beyond 90 seconds of
   no mouse/keyboard/scroll/touch activity while it is — a heuristic

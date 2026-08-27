@@ -20,21 +20,21 @@ function makeQuestion(overrides: Partial<Question> = {}): Question {
 }
 
 function makeSupabase(result: { error: { code?: string; message: string } | null }) {
-  const insert = vi.fn().mockResolvedValue(result);
-  const from = vi.fn().mockReturnValue({ insert });
-  return { client: { from } as never, insert, from };
+  const upsert = vi.fn().mockResolvedValue(result);
+  const from = vi.fn().mockReturnValue({ upsert });
+  return { client: { from } as never, upsert, from };
 }
 
 const baseInput = {
-  attemptId: "attempt-1",
+  attemptEventId: "attempt-1",
   userId: null as string | null,
   guestId: "guest-1" as string | null,
   sessionId: "session-1",
-  source: "quick_practice" as const,
+  practiceMode: "quick_practice" as const,
   question: makeQuestion(),
   selectedResponse: 1,
   startedAt: 1_000,
-  submittedAt: 5_000,
+  completedAt: 5_000,
   activeSeconds: 4
 };
 
@@ -74,65 +74,75 @@ describe("recordQuestionAttempt validation", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("rejects a submission timestamp before the start timestamp", async () => {
+  it("rejects a completion timestamp before the start timestamp", async () => {
     const { client, from } = makeSupabase({ error: null });
-    const result = await recordQuestionAttempt(client, { ...baseInput, startedAt: 5_000, submittedAt: 1_000 });
+    const result = await recordQuestionAttempt(client, { ...baseInput, startedAt: 5_000, completedAt: 1_000 });
     expect(result.ok).toBe(false);
     expect(from).not.toHaveBeenCalled();
   });
 });
 
 describe("recordQuestionAttempt happy path", () => {
-  it("inserts a correctly-shaped row for a guest attempt", async () => {
-    const { client, insert } = makeSupabase({ error: null });
+  it("upserts a correctly-shaped row for a guest attempt, ignoring duplicates on attempt_event_id", async () => {
+    const { client, upsert } = makeSupabase({ error: null });
     const result = await recordQuestionAttempt(client, baseInput);
 
     expect(result.ok).toBe(true);
-    expect(insert).toHaveBeenCalledTimes(1);
-    const row = insert.mock.calls[0][0];
+    expect(upsert).toHaveBeenCalledTimes(1);
+    const [row, options] = upsert.mock.calls[0];
+    expect(options).toEqual({ onConflict: "attempt_event_id", ignoreDuplicates: true });
     expect(row).toMatchObject({
-      id: "attempt-1",
       user_id: null,
       guest_id: "guest-1",
       session_id: "session-1",
-      source: "quick_practice",
-      problem_id: "q1",
+      attempt_event_id: "attempt-1",
+      question_id: "q1",
       domain: "Algebra",
       topic: "Arithmetic",
       difficulty: "Easy",
+      practice_mode: "quick_practice",
+      source_name: "Quick Practice",
       selected_answer: "4",
       correct_answer: "4",
-      correct: true,
-      active_time_seconds: 4
+      is_correct: true,
+      time_spent_seconds: 4,
+      completion_date: "1970-01-01"
     });
+    expect(row.id).toBeUndefined();
   });
 
   it("clears guest_id when userId is set, even if a stray guestId was passed in", async () => {
-    const { client, insert } = makeSupabase({ error: null });
+    const { client, upsert } = makeSupabase({ error: null });
     await recordQuestionAttempt(client, { ...baseInput, userId: "user-1", guestId: null });
-    const row = insert.mock.calls[0][0];
+    const row = upsert.mock.calls[0][0];
     expect(row.user_id).toBe("user-1");
     expect(row.guest_id).toBeNull();
   });
 
   it("marks an incorrect response as incorrect", async () => {
-    const { client, insert } = makeSupabase({ error: null });
+    const { client, upsert } = makeSupabase({ error: null });
     await recordQuestionAttempt(client, { ...baseInput, selectedResponse: 0 });
-    const row = insert.mock.calls[0][0];
-    expect(row.correct).toBe(false);
+    const row = upsert.mock.calls[0][0];
+    expect(row.is_correct).toBe(false);
     expect(row.selected_answer).toBe("3");
+  });
+
+  it("labels each practice mode with a human-readable source_name", async () => {
+    const { client, upsert } = makeSupabase({ error: null });
+    await recordQuestionAttempt(client, { ...baseInput, practiceMode: "full_test" });
+    expect(upsert.mock.calls[0][0].source_name).toBe("Full Test");
   });
 });
 
-describe("recordQuestionAttempt duplicate handling", () => {
-  it("treats a primary-key conflict (23505) as already-recorded success, not a failure", async () => {
-    const { client } = makeSupabase({ error: { code: "23505", message: "duplicate key value" } });
+describe("recordQuestionAttempt error handling", () => {
+  it("surfaces a genuine database error as a failure, not a silent success", async () => {
+    const { client } = makeSupabase({ error: { code: "42501", message: "permission denied" } });
     const result = await recordQuestionAttempt(client, baseInput);
-    expect(result).toEqual({ ok: true });
+    expect(result.ok).toBe(false);
   });
 
-  it("surfaces a genuine database error as a failure", async () => {
-    const { client } = makeSupabase({ error: { code: "42501", message: "permission denied" } });
+  it("surfaces a missing unique-index error distinctly (duplicate protection isn't active)", async () => {
+    const { client } = makeSupabase({ error: { code: "42P10", message: "no unique or exclusion constraint matching the ON CONFLICT specification" } });
     const result = await recordQuestionAttempt(client, baseInput);
     expect(result.ok).toBe(false);
   });
