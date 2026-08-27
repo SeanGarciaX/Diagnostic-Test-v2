@@ -19,10 +19,11 @@ function makeQuestion(overrides: Partial<Question> = {}): Question {
   };
 }
 
-function makeSupabase(result: { error: { code?: string; message: string } | null }) {
-  const upsert = vi.fn().mockResolvedValue(result);
+function makeSupabase(result: { error: { code?: string; message: string } | null; data?: unknown[] }) {
+  const select = vi.fn().mockResolvedValue(result);
+  const upsert = vi.fn().mockReturnValue({ select });
   const from = vi.fn().mockReturnValue({ upsert });
-  return { client: { from } as never, upsert, from };
+  return { client: { from } as never, upsert, select, from };
 }
 
 const baseInput = {
