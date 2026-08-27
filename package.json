@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Orbit SAT Math — adaptive practice, real questions, and real accounts.",
+  "engines": {
+    "node": ">=18.17.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
