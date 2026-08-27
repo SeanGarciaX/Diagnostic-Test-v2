@@ -119,6 +119,15 @@ export async function recordQuestionAttempt(
       console.error(
         `recordQuestionAttempt: question_attempts.attempt_event_id has no unique index — duplicate protection is not active. Run db/migrations/0003_question_attempts_guest_schema.sql. (${context})`
       );
+    } else if (error.code === "42501") {
+      // "permission denied for table question_attempts" — RLS policies can
+      // be perfectly correct and inserts will still fail if the anon/
+      // authenticated role was never GRANTed access to the table itself
+      // (common when a table is created by hand in the SQL Editor instead
+      // of Supabase's Table Editor UI, which grants this automatically).
+      console.error(
+        `recordQuestionAttempt: permission denied on question_attempts — the anon/authenticated role likely has no GRANT on this table (separate from RLS). Run db/migrations/0004_question_attempts_grants.sql. (${context})`
+      );
     } else {
       console.error(`recordQuestionAttempt: insert failed: ${error.message} (${context})`);
     }
