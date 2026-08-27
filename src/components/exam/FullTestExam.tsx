@@ -196,11 +196,11 @@ export function FullTestExam({
       const question = bankForAnalytics[i];
       const response = answersForAnalytics[i] ?? undefined;
       void recordQuestionAttempt(supabase, {
-        attemptId: attemptIdsRef.current[i] ?? randomId(),
+        attemptEventId: attemptIdsRef.current[i] ?? randomId(),
         userId,
         guestId: userId ? null : guestIdRef.current,
         sessionId: analyticsSessionId,
-        source: "full_test",
+        practiceMode: "full_test",
         question,
         selectedResponse: response,
         startedAt: firstEnteredAtByIndexRef.current[i] ?? examStartedAt,

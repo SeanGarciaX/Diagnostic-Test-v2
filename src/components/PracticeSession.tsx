@@ -118,11 +118,11 @@ export function PracticeSession({
     // practice flow (see recordQuestionAttempt's own error handling).
     if (!guestIdRef.current && !userId) guestIdRef.current = getOrCreateGuestIdClient();
     void recordQuestionAttempt(supabase, {
-      attemptId: randomId(),
+      attemptEventId: randomId(),
       userId,
       guestId: userId ? null : guestIdRef.current,
       sessionId: analyticsSessionIdRef.current!,
-      source: isReview ? "spaced_review" : "quick_practice",
+      practiceMode: isReview ? "spaced_review" : "quick_practice",
       question,
       selectedResponse: response,
       startedAt,
