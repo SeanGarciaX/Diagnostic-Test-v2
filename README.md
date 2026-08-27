@@ -12,11 +12,14 @@ behind every major decision.
 > **Temporary:** account creation is currently disabled as the front door
 > while a sign-up bug is being tracked down. Every visitor lands directly
 > in the app as a **guest** — real questions, practice, and the full test
-> all work; progress (attempts, mastery, review history) isn't saved until
-> that's fixed. Settings (display name, target score, daily goal, theme)
-> **are** saved for guests, but only in a cookie on that one device/browser
-> — see `src/lib/guestSettings.ts` — not tied to any account. `/sign-in`
-> and `/sign-up` still work if you go to them directly. See
+> all work; the older per-account mastery/spaced-review history (`attempts`,
+> `practice_sessions`, `review_queue`) isn't saved until that's fixed.
+> Settings (display name, target score, daily goal, theme) **are** saved
+> for guests, but only in a cookie on that one device/browser — see
+> `src/lib/guestSettings.ts` — not tied to any account. **Dashboard/
+> Analytics performance tracking works for guests too** (see below) — it's
+> a separate, newer system built specifically so it didn't need accounts to
+> work. `/sign-in` and `/sign-up` still work if you go to them directly. See
 > `src/lib/viewer.ts` and `src/app/page.tsx` for exactly what changed and
 > how to flip it back once sign-up is working.
 
@@ -37,9 +40,15 @@ behind every major decision.
   `src/components/exam/FullTestExam.tsx`.
 - **Spaced review** — missed questions come back at 1, 3, 7, and 14-day
   intervals until you've got them down.
-- **Dashboard & Progress** — a mastery score per topic, accuracy, streaks,
-  and an "Orbit Coach" recommendation for what to practice next, all
-  computed from your real answer history in the database.
+- **Dashboard & Advanced Analytics** — problems completed, accuracy,
+  time spent, a daily practice streak, a "Today's Mission" goal tracker,
+  and a full SAT Math domain breakdown (accuracy, volume, and speed per
+  domain, plus difficulty and trend charts) — all computed from real
+  submitted-answer history, **for guests and signed-in students alike**.
+  See [Guest-friendly performance tracking](#guest-friendly-performance-tracking)
+  below for how that works without an account.
+- **Progress** — a mastery score per topic, accuracy, streaks, computed
+  from your real answer history (signed-in students only, for now).
 - **Settings** — pick one of three color themes, set a target score and
   daily question goal.
 
@@ -61,13 +70,21 @@ src/
     mastery.ts            the mastery-score formula
     adaptive.ts            picks what to recommend practicing next
     reviewScheduler.ts     the 1/3/7/14-day spaced-review timing
-    attempts.ts / profile.ts   read & write the database tables
+    attempts.ts / profile.ts   read & write the OLDER signed-in-only tables
+    analytics.ts             the ONE write path for Dashboard/Analytics —
+                               every question-answering flow calls
+                               recordQuestionAttempt() from here
+    dashboardData.ts            reads the Dashboard/Analytics aggregate data
+    guestId.ts / activeTime.ts    the guest identifier cookie, and the
+                                    idle-aware active-time tracker
     supabase/               the three ways we talk to Supabase (browser,
                               server, and the session-refresh middleware)
     exam/                     Full Test-specific logic (the defensive
                                 math-rendering fallback layer)
 db/
-  migrations/0001_init.sql  the database schema — run this once, see below
+  migrations/0001_init.sql  the OLDER, signed-in-only schema — run once
+  migrations/0002_question_attempts.sql  the Dashboard/Analytics schema —
+                                           run once, works for guests too
 ```
 
 Every page under `src/app/` follows the same shape: it's a small Server
@@ -87,10 +104,14 @@ question bank is already there) and Node.js installed locally.
 1. Open your Supabase project's dashboard → **SQL Editor** → **New query**.
 2. Paste in the entire contents of [`db/migrations/0001_init.sql`](db/migrations/0001_init.sql).
 3. Click **Run**.
+4. Repeat with [`db/migrations/0002_question_attempts.sql`](db/migrations/0002_question_attempts.sql).
 
-This adds four new tables (`profiles`, `practice_sessions`, `attempts`,
-`review_queue`) alongside your existing question table. It does not modify
-or touch the existing question table in any way.
+The first migration adds four tables (`profiles`, `practice_sessions`,
+`attempts`, `review_queue`) that only work for signed-in students. The
+second adds one more table, `question_attempts`, plus a handful of
+read-only SQL functions — this is what powers Dashboard/Advanced Analytics,
+and it's the one that also works for guests (no sign-in needed). Neither
+migration modifies or touches the existing question table in any way.
 
 ### 2. Configure your environment
 
@@ -120,6 +141,45 @@ npm run dev
 ```
 
 Open `http://localhost:3000`, create an account, and you're in.
+
+## Guest-friendly performance tracking
+
+Dashboard and Advanced Analytics are built on a separate, newer system from
+the rest of the app (`question_attempts` — see
+`db/migrations/0002_question_attempts.sql`), specifically so it works for a
+guest, not just a signed-in student:
+
+- **One write path.** Every question-answering flow — Quick Practice,
+  Spaced Review, and the Full Test — calls the same
+  `recordQuestionAttempt()` (`src/lib/analytics.ts`). A new mode should call
+  it too, rather than inventing its own tracking.
+- **Guest identity is a cookie, not an account.** `src/lib/guestId.ts` sets
+  a long-lived, random id the first time a guest submits an answer — the
+  same one every time on that browser, until the cookie is cleared. It's
+  read server-side for Dashboard/Analytics and client-side for recording.
+  It's a browser identifier, not a person: a new browser, private window,
+  or cleared cookie starts a fresh history. A signed-in student's real
+  `user_id` is used instead and never mixes with a guest id — see the
+  ownership check in the migration — so guest history doesn't automatically
+  carry over to an account today, but the schema is shaped so that could be
+  added later without a rebuild.
+- **One submission = one attempt, on purpose.** The id recorded with each
+  attempt is generated client-side at submit time and used as that row's
+  primary key, so a double-click, a re-render, or a retried request can
+  never double-count — the database rejects the repeat insert and the app
+  treats that as "already recorded." Answering the same question again
+  later (e.g. spaced review resurfacing it) gets a fresh id, so it's
+  correctly counted as a second, real attempt.
+- **"Active time," not wall-clock time.** `src/lib/activeTime.ts` excludes
+  time while the tab isn't visible/focused, and time beyond 90 seconds of
+  no mouse/keyboard/scroll/touch activity while it is — a heuristic
+  estimate of time actually spent on the question, documented in that
+  file.
+- **Aggregation happens in Postgres**, not the browser: Dashboard/Analytics
+  call a handful of `SECURITY DEFINER` SQL functions
+  (`question_attempts_totals`, `_daily`, `_domain_summary`, etc.) that
+  return small, pre-aggregated result sets, so page load time doesn't grow
+  with how much history a student has.
 
 ## Everyday commands
 

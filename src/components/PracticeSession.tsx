@@ -12,6 +12,10 @@ import { isAnswerCorrect } from "@/lib/questions";
 import { advanceReviewItem, completeSession, markMissedForReview, recordAttempt, startSession } from "@/lib/attempts";
 import { scheduleAfterSuccess } from "@/lib/reviewScheduler";
 import { playSound } from "@/lib/sounds";
+import { recordQuestionAttempt } from "@/lib/analytics";
+import { getOrCreateGuestIdClient } from "@/lib/guestId";
+import { useActiveTimeTracker } from "@/lib/activeTime";
+import { randomId } from "@/lib/id";
 import type { Confidence, Question } from "@/lib/types";
 import type { ReviewItem } from "@/lib/reviewScheduler";
 import { QuestionCard } from "./QuestionCard";
@@ -29,13 +33,29 @@ export function PracticeSession({
   reviewItemsByProblemId: Record<string, ReviewItem>;
 }) {
   const supabase = createClient();
-  // Guests (userId === null) have no Supabase session, so any write here
-  // would just be rejected by Row Level Security — skip persistence
-  // entirely and let them work through the session locally instead.
+  // Guests (userId === null) have no Supabase session, so the OLD
+  // signed-in-only `attempts` table write is skipped for them — that
+  // table's RLS policy rejects any row with no real auth.uid() anyway.
+  // The NEW centralized `question_attempts` write a few lines down runs
+  // for guests AND signed-in students alike; see src/lib/analytics.ts.
   const sessionIdRef = useRef<Promise<string> | null>(null);
   if (!sessionIdRef.current && userId) {
     sessionIdRef.current = startSession(supabase, userId, isReview ? "practice" : "practice");
   }
+  // One id per PracticeSession mount, groups this run's attempts together
+  // in the new centralized table (see question_attempts.session_id).
+  const analyticsSessionIdRef = useRef<string | null>(null);
+  if (!analyticsSessionIdRef.current) analyticsSessionIdRef.current = randomId();
+  // Lazily read/created on first submit (getOrCreateGuestIdClient touches
+  // document, so it can't run during server-side render).
+  const guestIdRef = useRef<string | null>(null);
+  const { activeSecondsBetween } = useActiveTimeTracker();
+  // Guards against a single click firing submit() twice (a fast
+  // double-click, or a re-render racing the async work below) before
+  // `submitted` state has actually flipped — see the analytics spec's
+  // duplicate-prevention requirement. The primary key on question_attempts
+  // is the backstop for anything this guard misses.
+  const submitInFlightRef = useRef(false);
 
   const [index, setIndex] = useState(0);
   const [response, setResponse] = useState<number | string>();
@@ -52,6 +72,7 @@ export function PracticeSession({
     setSubmitted(false);
     setConfidence("Okay");
     setStartedAt(Date.now());
+    submitInFlightRef.current = false;
   }, [index]);
 
   if (questions.length === 0) {
@@ -79,6 +100,8 @@ export function PracticeSession({
 
   const submit = async () => {
     if (response === undefined) return;
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setSubmitted(true);
 
     const correct = isAnswerCorrect(question, response);
@@ -88,6 +111,23 @@ export function PracticeSession({
     // treating this as a direct response to the user's click, which some
     // browsers require in order to allow audio playback.
     playSound(correct ? "correct" : "incorrect");
+
+    // Centralized analytics — records for a guest and a signed-in student
+    // alike, feeds the Dashboard/Analytics pages. Fire-and-forget on
+    // purpose: an analytics write should never block or fail the actual
+    // practice flow (see recordQuestionAttempt's own error handling).
+    if (!guestIdRef.current && !userId) guestIdRef.current = getOrCreateGuestIdClient();
+    void recordQuestionAttempt(supabase, {
+      attemptId: randomId(),
+      userId,
+      guestId: userId ? null : guestIdRef.current,
+      sessionId: analyticsSessionIdRef.current!,
+      source: isReview ? "spaced_review" : "quick_practice",
+      question,
+      selectedResponse: response,
+      startedAt,
+      activeSeconds: activeSecondsBetween(startedAt, Date.now())
+    });
 
     if (userId) {
       const sessionId = await sessionIdRef.current;

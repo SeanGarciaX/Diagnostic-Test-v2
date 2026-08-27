@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getViewer } from "@/lib/viewer";
 import { fetchQuestions } from "@/lib/questions";
 import { NavShell } from "@/components/NavShell";
@@ -11,7 +12,7 @@ export default async function TestPage() {
     <NavShell profile={profile} activeHref="/test">
       {!user && (
         <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 12, maxWidth: 1500, marginLeft: "auto", marginRight: "auto" }}>
-          Browsing as a guest — this run won&apos;t be saved to your progress.
+          Browsing as a guest — this run is tracked on this browser and shows up on your <Link href="/dashboard">Dashboard</Link>.
         </p>
       )}
       <FullTestExam userId={user?.id ?? null} studentName={profile.displayName} allQuestions={allQuestions} />
