@@ -45,6 +45,16 @@ alter table public.question_attempts add column if not exists time_spent_seconds
 alter table public.question_attempts add column if not exists completion_date date;
 alter table public.question_attempts add column if not exists created_at timestamptz not null default now();
 
+-- RLS policies (below) control WHICH rows a role can touch; they don't grant
+-- access to the table at all — that's a separate, plain SQL privilege. If
+-- this table was created by hand in the SQL Editor (not through the Table
+-- Editor UI, which grants this automatically), anon/authenticated have zero
+-- privileges on it by default and every insert fails with "permission
+-- denied for table question_attempts" regardless of how correct the RLS
+-- policies are. See db/migrations/0004_question_attempts_grants.sql.
+grant usage on schema public to anon, authenticated;
+grant select, insert on public.question_attempts to anon, authenticated;
+
 create unique index if not exists question_attempts_attempt_event_id_key on public.question_attempts (attempt_event_id);
 create index if not exists question_attempts_guest_completed_idx on public.question_attempts (guest_id, completed_at desc) where guest_id is not null;
 create index if not exists question_attempts_user_completed_idx on public.question_attempts (user_id, completed_at desc) where user_id is not null;

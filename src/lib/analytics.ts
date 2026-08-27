@@ -47,6 +47,27 @@ export type QuestionAttemptInput = {
 
 export type RecordAttemptResult = { ok: true } | { ok: false; reason: string };
 
+// Postgres/PostgREST error codes worth naming specifically, so a failed
+// write points straight at the fix instead of a generic "insert failed."
+// (docs: https://www.postgresql.org/docs/current/errcodes-appendix.html)
+const KNOWN_ERROR_HINTS: Record<string, string> = {
+  "42P10":
+    "question_attempts.attempt_event_id has no unique index — duplicate protection is not active. Run db/migrations/0003_question_attempts_guest_schema.sql (or 0005 if 0003 is already applied).",
+  "42501":
+    "permission denied on question_attempts — the anon/authenticated role likely has no GRANT on this table (separate from RLS policies). Run db/migrations/0004_question_attempts_grants.sql.",
+  "42703": "a column this app writes to doesn't exist on question_attempts — the table's real schema doesn't match what's expected. Compare against db/migrations/0003_question_attempts_guest_schema.sql's `add column` list.",
+  "42P01": '"question_attempts" table not found — check it exists in the public schema of the connected Supabase project (right URL/key?).',
+  "23502": "a NOT NULL column on question_attempts wasn't included in this write — check which column the error names and either allow it to be null or make sure the app populates it.",
+  "23514": "a CHECK constraint on question_attempts rejected this row — likely domain/topic/difficulty/practice_mode doesn't match an allowed value/enum on that column. Check the error's constraint name in Supabase.",
+  "22P02": "a value didn't match its column's type (e.g. a column expecting a UUID or enum got a plain string) — check the error detail for which column.",
+  "23503": "a foreign key on question_attempts was violated — most likely user_id referencing auth.users with a value that doesn't exist (shouldn't happen for a guest row, where user_id is always null)."
+};
+
+function describeError(error: { code?: string; message: string }): string {
+  const hint = error.code ? KNOWN_ERROR_HINTS[error.code] : undefined;
+  return hint ? `${hint} (Postgres code ${error.code}: ${error.message})` : `${error.message}${error.code ? ` (Postgres code ${error.code})` : ""}`;
+}
+
 /**
  * Validates and records one submitted answer. Never throws — a malformed
  * or failed write is logged (with enough context to identify the question
@@ -100,30 +121,34 @@ export async function recordQuestionAttempt(
     completion_date: completedAtIso.slice(0, 10)
   };
 
+  const context = `question_id=${input.question.id} guest_id=${input.guestId ?? "-"} user_id=${input.userId ?? "-"} attempt_event_id=${input.attemptEventId} practice_mode=${input.practiceMode}`;
+  // Temporary, deliberate debug visibility while wiring this up against a
+  // real Supabase project — see the app's README section on guest
+  // tracking. Cheap and harmless to leave in: one line per submitted
+  // answer, not per render/poll.
+  console.debug(`recordQuestionAttempt: writing (${context})`);
+
   // Upsert-ignore on the attempt_event_id unique index (see the migration)
   // instead of a plain insert: a double-click, a re-render, or a client
   // retry after the first insert already succeeded all resend the SAME
   // attempt_event_id, so this becomes a no-op rather than a second row. A
   // genuine retry of the QUESTION gets a fresh id from the caller, so it's
   // correctly recorded as a second, real attempt.
-  const { error } = await supabase.from("question_attempts").upsert(row, { onConflict: "attempt_event_id", ignoreDuplicates: true });
+  const { data, error } = await supabase
+    .from("question_attempts")
+    .upsert(row, { onConflict: "attempt_event_id", ignoreDuplicates: true })
+    .select();
 
   if (error) {
-    const context = `question_id=${input.question.id} guest_id=${input.guestId ?? "-"} user_id=${input.userId ?? "-"} attempt_event_id=${input.attemptEventId}`;
-    if (error.code === "42P10") {
-      // "there is no unique or exclusion constraint matching the ON
-      // CONFLICT specification" — the table is missing the unique index
-      // this idempotency strategy depends on. Surface this loudly: it's a
-      // schema problem, not a transient failure, and duplicate protection
-      // is silently NOT working until it's fixed (see the migration file).
-      console.error(
-        `recordQuestionAttempt: question_attempts.attempt_event_id has no unique index — duplicate protection is not active. Run db/migrations/0003_question_attempts_guest_schema.sql. (${context})`
-      );
-    } else {
-      console.error(`recordQuestionAttempt: insert failed: ${error.message} (${context})`);
-    }
+    console.error(`recordQuestionAttempt: write failed — ${describeError(error)} (${context})`);
     return { ok: false, reason: error.message };
   }
+
+  // With ignoreDuplicates, a genuine duplicate returns an empty `data` array
+  // (0 rows affected) and NO error — that's the intended no-op path, not a
+  // failure, so it's still reported as ok. A fresh row returns the inserted
+  // row back in `data`.
+  console.debug(`recordQuestionAttempt: ${data && data.length > 0 ? "wrote 1 row" : "no-op (duplicate attempt_event_id)"} (${context})`);
 
   return { ok: true };
 }

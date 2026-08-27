@@ -112,7 +112,14 @@ question bank is already there) and Node.js installed locally.
 2. Paste in the entire contents of [`db/migrations/0001_init.sql`](db/migrations/0001_init.sql).
 3. Click **Run**.
 4. Repeat with [`db/migrations/0003_question_attempts_guest_schema.sql`](db/migrations/0003_question_attempts_guest_schema.sql)
-   (skip `0002` — it's superseded, see the file layout above).
+   (skip `0002` — it's superseded, see the file layout above). **If you ran
+   an earlier copy of `0003` before it included the `grant` lines near the
+   top**, also run
+   [`db/migrations/0004_question_attempts_grants.sql`](db/migrations/0004_question_attempts_grants.sql)
+   — without it, tracking fails silently (analytics writes are rejected
+   with "permission denied for table question_attempts," logged to the
+   browser console, but the question-answering UI itself shows nothing
+   wrong). Both files are safe to run more than once.
 
 The first migration adds four tables (`profiles`, `practice_sessions`,
 `attempts`, `review_queue`) that only work for signed-in students. The

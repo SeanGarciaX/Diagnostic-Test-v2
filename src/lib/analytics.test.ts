@@ -19,10 +19,11 @@ function makeQuestion(overrides: Partial<Question> = {}): Question {
   };
 }
 
-function makeSupabase(result: { error: { code?: string; message: string } | null }) {
-  const upsert = vi.fn().mockResolvedValue(result);
+function makeSupabase(result: { error: { code?: string; message: string } | null; data?: unknown[] }) {
+  const select = vi.fn().mockResolvedValue(result);
+  const upsert = vi.fn().mockReturnValue({ select });
   const from = vi.fn().mockReturnValue({ upsert });
-  return { client: { from } as never, upsert, from };
+  return { client: { from } as never, upsert, select, from };
 }
 
 const baseInput = {
@@ -135,14 +136,20 @@ describe("recordQuestionAttempt happy path", () => {
 });
 
 describe("recordQuestionAttempt error handling", () => {
-  it("surfaces a genuine database error as a failure, not a silent success", async () => {
-    const { client } = makeSupabase({ error: { code: "42501", message: "permission denied" } });
+  it("surfaces an unrecognized database error as a failure, not a silent success", async () => {
+    const { client } = makeSupabase({ error: { code: "08006", message: "connection failure" } });
     const result = await recordQuestionAttempt(client, baseInput);
     expect(result.ok).toBe(false);
   });
 
   it("surfaces a missing unique-index error distinctly (duplicate protection isn't active)", async () => {
     const { client } = makeSupabase({ error: { code: "42P10", message: "no unique or exclusion constraint matching the ON CONFLICT specification" } });
+    const result = await recordQuestionAttempt(client, baseInput);
+    expect(result.ok).toBe(false);
+  });
+
+  it("surfaces a missing table grant distinctly from an RLS rejection", async () => {
+    const { client } = makeSupabase({ error: { code: "42501", message: "permission denied for table question_attempts" } });
     const result = await recordQuestionAttempt(client, baseInput);
     expect(result.ok).toBe(false);
   });

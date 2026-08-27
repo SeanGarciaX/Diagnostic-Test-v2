@@ -1,9 +1,10 @@
 // Read path for the Dashboard and Analytics pages. Every function here
 // calls one of the SECURITY DEFINER aggregate functions from
-// db/migrations/0002_question_attempts.sql instead of pulling raw attempt
-// history into the browser — the aggregation happens in Postgres, so
-// these pages stay fast regardless of how many questions a student has
-// answered over time (see the migration file's own comments for why).
+// db/migrations/0003_question_attempts_guest_schema.sql instead of pulling
+// raw attempt history into the browser — the aggregation happens in
+// Postgres, so these pages stay fast regardless of how many questions a
+// student has answered over time (see the migration file's own comments
+// for why).
 //
 // Every function takes an `AnalyticsIdentity` (exactly one of userId/
 // guestId set) so the exact same query works for today's guest and for a
@@ -43,6 +44,23 @@ function identityParams(identity: AnalyticsIdentity) {
   return { p_user_id: identity.userId, p_guest_id: identity.guestId };
 }
 
+// Same idea as src/lib/analytics.ts's error hints, for the read side. These
+// run in Server Components, so this logs to the SERVER console (the `npm
+// run dev` terminal / your host's server logs), not the browser DevTools
+// console — check there if Dashboard/Analytics shows "could not be loaded."
+const RPC_ERROR_HINTS: Record<string, string> = {
+  "42883": "the RPC function's signature doesn't match this call (uuid/text argument types) — re-run db/migrations/0003_question_attempts_guest_schema.sql.",
+  "42501": "permission denied calling this function — the anon/authenticated role needs GRANT EXECUTE, see db/migrations/0003_question_attempts_guest_schema.sql's grant statements at the bottom.",
+  PGRST202: "the RPC function doesn't exist in this Supabase project's schema cache yet — run db/migrations/0003_question_attempts_guest_schema.sql, then wait a few seconds for PostgREST to reload its schema (or restart the API from Supabase's dashboard).",
+  "42883_UUID_TEXT": "likely a uuid/text comparison mismatch inside the function (e.g. guest_id column type) — run db/migrations/0005_question_attempts_guest_id_cast.sql."
+};
+
+function logRpcError(fnName: string, identity: AnalyticsIdentity, error: { code?: string; message: string }) {
+  const hint = (error.code && RPC_ERROR_HINTS[error.code]) || (error.message.includes("uuid") && error.message.includes("text") ? RPC_ERROR_HINTS["42883_UUID_TEXT"] : undefined);
+  const context = `guest_id=${identity.guestId ?? "-"} user_id=${identity.userId ?? "-"}`;
+  console.error(`${fnName}: RPC failed${hint ? ` — ${hint}` : ""} (Postgres: ${error.message}${error.code ? `, code ${error.code}` : ""}) (${context})`);
+}
+
 /** True once a real identity (guest cookie or signed-in user) is known — before that there's nothing to query at all, which is a distinct state from "queried and found zero rows." */
 export function hasIdentity(identity: AnalyticsIdentity): boolean {
   return Boolean(identity.userId || identity.guestId);
@@ -60,7 +78,10 @@ export async function fetchTotals(supabase: SupabaseClient, identity: AnalyticsI
   if (!hasIdentity(identity)) return { ok: true, data: EMPTY_TOTALS };
 
   const { data, error } = await supabase.rpc("question_attempts_totals", identityParams(identity));
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logRpcError("fetchTotals", identity, error);
+    return { ok: false, error: error.message };
+  }
   const row = data?.[0];
   if (!row) return { ok: true, data: EMPTY_TOTALS };
 
@@ -80,7 +101,10 @@ export async function fetchDaily(supabase: SupabaseClient, identity: AnalyticsId
   if (!hasIdentity(identity)) return { ok: true, data: [] };
 
   const { data, error } = await supabase.rpc("question_attempts_daily", { ...identityParams(identity), p_days: days });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logRpcError("fetchDaily", identity, error);
+    return { ok: false, error: error.message };
+  }
 
   return {
     ok: true,
@@ -97,7 +121,10 @@ export async function fetchDomainSummary(supabase: SupabaseClient, identity: Ana
   if (!hasIdentity(identity)) return { ok: true, data: [] };
 
   const { data, error } = await supabase.rpc("question_attempts_domain_summary", identityParams(identity));
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logRpcError("fetchDomainSummary", identity, error);
+    return { ok: false, error: error.message };
+  }
 
   return {
     ok: true,
@@ -114,7 +141,10 @@ export async function fetchDifficultySummary(supabase: SupabaseClient, identity:
   if (!hasIdentity(identity)) return { ok: true, data: [] };
 
   const { data, error } = await supabase.rpc("question_attempts_difficulty_summary", identityParams(identity));
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logRpcError("fetchDifficultySummary", identity, error);
+    return { ok: false, error: error.message };
+  }
 
   return {
     ok: true,
@@ -134,7 +164,10 @@ export async function fetchRecentQuestionAttempts(
   if (!hasIdentity(identity)) return { ok: true, data: [] };
 
   const { data, error } = await supabase.rpc("question_attempts_recent", { ...identityParams(identity), p_limit: limit });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logRpcError("fetchRecentQuestionAttempts", identity, error);
+    return { ok: false, error: error.message };
+  }
 
   return {
     ok: true,
