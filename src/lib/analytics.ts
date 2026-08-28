@@ -60,7 +60,8 @@ const KNOWN_ERROR_HINTS: Record<string, string> = {
   "23502": "a NOT NULL column on question_attempts wasn't included in this write — check which column the error names and either allow it to be null or make sure the app populates it.",
   "23514": "a CHECK constraint on question_attempts rejected this row — likely domain/topic/difficulty/practice_mode doesn't match an allowed value/enum on that column. Check the error's constraint name in Supabase.",
   "22P02": "a value didn't match its column's type (e.g. a column expecting a UUID or enum got a plain string) — check the error detail for which column.",
-  "23503": "a foreign key on question_attempts was violated — most likely user_id referencing auth.users with a value that doesn't exist (shouldn't happen for a guest row, where user_id is always null)."
+  "23503": "a foreign key on question_attempts was violated — most likely user_id referencing auth.users with a value that doesn't exist (shouldn't happen for a guest row, where user_id is always null).",
+  "428C9": "a column in this write is a GENERATED/computed column in the real table (the database fills it in itself and rejects any explicit value) — remove that field from the insert payload in src/lib/analytics.ts."
 };
 
 function describeError(error: { code?: string; message: string }): string {
@@ -117,8 +118,12 @@ export async function recordQuestionAttempt(
     is_correct: correct,
     started_at: new Date(input.startedAt).toISOString(),
     completed_at: completedAtIso,
-    time_spent_seconds: Math.max(0, Math.round(input.activeSeconds)),
-    completion_date: completedAtIso.slice(0, 10)
+    time_spent_seconds: Math.max(0, Math.round(input.activeSeconds))
+    // completion_date is intentionally NOT written here — on the real
+    // table it's a GENERATED ALWAYS column derived from completed_at, and
+    // Postgres rejects any explicit value for a generated column (that was
+    // the actual cause of every single write failing: Postgres code
+    // 428C9). The database fills it in on its own from completed_at above.
   };
 
   const context = `question_id=${input.question.id} guest_id=${input.guestId ?? "-"} user_id=${input.userId ?? "-"} attempt_event_id=${input.attemptEventId} practice_mode=${input.practiceMode}`;

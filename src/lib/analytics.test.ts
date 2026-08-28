@@ -106,10 +106,13 @@ describe("recordQuestionAttempt happy path", () => {
       selected_answer: "4",
       correct_answer: "4",
       is_correct: true,
-      time_spent_seconds: 4,
-      completion_date: "1970-01-01"
+      time_spent_seconds: 4
     });
     expect(row.id).toBeUndefined();
+    // completion_date is a GENERATED column on the real table — Postgres
+    // rejects any explicit value for it (Postgres code 428C9), so it must
+    // never appear in the write payload; the database fills it in itself.
+    expect(row.completion_date).toBeUndefined();
   });
 
   it("clears guest_id when userId is set, even if a stray guestId was passed in", async () => {
@@ -150,6 +153,12 @@ describe("recordQuestionAttempt error handling", () => {
 
   it("surfaces a missing table grant distinctly from an RLS rejection", async () => {
     const { client } = makeSupabase({ error: { code: "42501", message: "permission denied for table question_attempts" } });
+    const result = await recordQuestionAttempt(client, baseInput);
+    expect(result.ok).toBe(false);
+  });
+
+  it("surfaces a generated-column write attempt distinctly (the real-world bug that motivated this)", async () => {
+    const { client } = makeSupabase({ error: { code: "428C9", message: 'column "completion_date" is a generated column' } });
     const result = await recordQuestionAttempt(client, baseInput);
     expect(result.ok).toBe(false);
   });

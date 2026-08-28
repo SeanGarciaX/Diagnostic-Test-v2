@@ -41,7 +41,14 @@ alter table public.question_attempts add column if not exists completed_at times
 alter table public.question_attempts add column if not exists time_spent_seconds integer;
 -- Plain date (not timestamptz) so day-bucketed queries never have to
 -- re-derive "which day" from a timestamp inside every aggregate query.
--- The app computes this client-side as completed_at's UTC date.
+-- NOTE: on the table as actually created for this project, this column
+-- turned out to be `generated always as (completed_at::date) stored` —
+-- i.e. Postgres computes it, and rejects any explicit value the app tries
+-- to write (error code 428C9). src/lib/analytics.ts does NOT include this
+-- field in its insert payload for exactly that reason. This `add column
+-- if not exists` is a no-op against that table (the column already
+-- exists) — it's here only so a from-scratch setup still gets a plain,
+-- writable date column with the same name and purpose.
 alter table public.question_attempts add column if not exists completion_date date;
 alter table public.question_attempts add column if not exists created_at timestamptz not null default now();
 
